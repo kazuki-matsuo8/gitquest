@@ -11,9 +11,6 @@ backend/.env
 backend/src/main/resources/application-local.yml
 *.jar
 
-# Docs
-docs/learning/
-
 # OS
 .DS_Store
 Thumbs.db
