@@ -1,0 +1,24 @@
+# Frontend
+frontend/.nuxt/
+frontend/.output/
+frontend/node_modules/
+frontend/.env
+
+# Backend
+backend/.gradle/
+backend/build/
+backend/.env
+backend/src/main/resources/application-local.yml
+*.jar
+
+# Docs
+docs/learning/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.iml
+.vscode/
