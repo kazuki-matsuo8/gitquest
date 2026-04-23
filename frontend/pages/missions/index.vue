@@ -62,22 +62,18 @@
             </div>
 
             <!-- ボタン -->
-            <button
-              v-if="progressStatus(mission.id) !== 'COMPLETED'"
-              class="mt-1 w-full text-sm font-semibold py-2.5 rounded-xl transition-all"
-              :class="progressStatus(mission.id) === 'IN_PROGRESS'
-                ? 'bg-blue-600 hover:bg-blue-500 text-white'
-                : 'bg-gray-800 hover:bg-gray-700 text-gray-200'"
-              @click="handleStart(mission.id)"
+            <NuxtLink
+              :to="`/missions/${mission.id}`"
+              class="mt-1 w-full text-sm font-semibold py-2.5 rounded-xl transition-all text-center block"
+              :class="progressStatus(mission.id) === 'COMPLETED'
+                ? 'bg-green-600/20 text-green-400 hover:bg-green-600/30'
+                : progressStatus(mission.id) === 'IN_PROGRESS'
+                  ? 'bg-blue-600 hover:bg-blue-500 text-white'
+                  : 'bg-gray-800 hover:bg-gray-700 text-gray-200'"
+              @click="progressStatus(mission.id) === 'NOT_STARTED' && handleStart(mission.id)"
             >
-              {{ progressStatus(mission.id) === 'IN_PROGRESS' ? '進行中' : 'スタート' }}
-            </button>
-            <div
-              v-else
-              class="mt-1 w-full text-sm font-semibold py-2.5 rounded-xl bg-green-600/20 text-green-400 text-center"
-            >
-              完了
-            </div>
+              {{ progressStatus(mission.id) === 'COMPLETED' ? '完了 — 再挑戦' : progressStatus(mission.id) === 'IN_PROGRESS' ? '続ける' : 'スタート' }}
+            </NuxtLink>
           </div>
         </div>
       </section>
