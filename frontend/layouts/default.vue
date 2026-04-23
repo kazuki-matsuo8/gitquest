@@ -13,14 +13,17 @@
           <div class="flex items-center gap-2 sm:gap-4">
             <template v-if="auth.isLoggedIn">
               <NuxtLink
+                to="/dashboard"
+                class="text-sm text-gray-300 hover:text-white px-3 py-2 rounded-lg hover:bg-gray-800 transition-colors hidden sm:block"
+              >
+                ダッシュボード
+              </NuxtLink>
+              <NuxtLink
                 to="/missions"
                 class="text-sm text-gray-300 hover:text-white px-3 py-2 rounded-lg hover:bg-gray-800 transition-colors"
               >
                 ミッション
               </NuxtLink>
-              <div class="flex items-center gap-2 text-sm text-gray-400">
-                <span class="hidden sm:inline">{{ auth.username }}</span>
-              </div>
               <button
                 class="text-sm text-gray-400 hover:text-red-400 px-3 py-2 rounded-lg hover:bg-gray-800 transition-colors"
                 @click="logout"

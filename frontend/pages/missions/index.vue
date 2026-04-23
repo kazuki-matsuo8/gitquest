@@ -16,8 +16,22 @@
       ミッションの取得に失敗しました
     </div>
 
+    <!-- 全体進捗バー -->
+    <div v-if="!pending && !error" class="mb-8 bg-gray-900 border border-gray-800 rounded-2xl p-5">
+      <div class="flex items-center justify-between mb-3">
+        <span class="text-sm font-medium text-gray-300">全体の進捗</span>
+        <span class="text-sm font-semibold text-green-400">{{ completedCount }} / {{ totalCount }} クリア</span>
+      </div>
+      <div class="h-2.5 bg-gray-800 rounded-full overflow-hidden">
+        <div
+          class="h-full bg-gradient-to-r from-green-600 to-green-400 rounded-full transition-all duration-700"
+          :style="{ width: `${totalCount > 0 ? (completedCount / totalCount) * 100 : 0}%` }"
+        />
+      </div>
+    </div>
+
     <!-- ミッション一覧 -->
-    <div v-else class="flex flex-col gap-10">
+    <div v-if="!pending && !error" class="flex flex-col gap-10">
       <section
         v-for="(missions, level) in missionsByLevel"
         :key="level"
@@ -121,6 +135,15 @@ async function fetchProgress() {
 }
 
 onMounted(fetchProgress)
+
+// 全ミッション数・クリア数
+const totalCount = computed(() => {
+  if (!missionsByLevel.value) return 0
+  return Object.values(missionsByLevel.value).flat().length
+})
+const completedCount = computed(() =>
+  progressList.value.filter((p) => p.status === 'COMPLETED').length
+)
 
 // ミッション ID からステータスを返す
 function progressStatus(missionId: string): string {
