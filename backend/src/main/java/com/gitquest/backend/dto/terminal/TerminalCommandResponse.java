@@ -1,9 +1,10 @@
 package com.gitquest.backend.dto.terminal;
 
 public record TerminalCommandResponse(
-        String output,   // コマンドの標準出力 + 標準エラー
-        boolean success, // 終了コードが 0 かどうか
-        GraphData graph  // コミットグラフ情報
+        String output,           // コマンドの標準出力 + 標準エラー
+        boolean success,         // 終了コードが 0 かどうか
+        GraphData graph,         // コミットグラフ情報
+        boolean missionCompleted // ミッション完了条件を満たしたかどうか
 ) {
     public record GraphData(
             java.util.List<CommitNode> commits,

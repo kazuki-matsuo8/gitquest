@@ -14,12 +14,10 @@
       class="flex-1 overflow-y-auto px-4 py-3 space-y-1 min-h-0"
     >
       <div v-for="(entry, i) in log" :key="i">
-        <!-- 入力コマンド行 -->
         <div v-if="entry.type === 'input'" class="flex gap-2">
           <span class="text-green-400 shrink-0">$</span>
           <span class="text-white">{{ entry.text }}</span>
         </div>
-        <!-- 出力行 -->
         <div
           v-else
           class="whitespace-pre-wrap leading-relaxed"
@@ -27,7 +25,6 @@
         >{{ entry.text }}</div>
       </div>
 
-      <!-- カーソル点滅（入力待ち） -->
       <div v-if="!loading" class="flex gap-2 items-center">
         <span class="text-green-400">$</span>
         <span class="w-2 h-4 bg-green-400 animate-pulse" />
@@ -55,12 +52,16 @@
 </template>
 
 <script setup lang="ts">
+import type { GraphData } from '~/types/terminal'
+
 const props = defineProps<{
   sessionId: string | null
+  missionId: string
 }>()
 
 const emit = defineEmits<{
-  graphUpdated: [graph: unknown]
+  graphUpdated: [graph: GraphData]
+  missionCompleted: []
 }>()
 
 const config = useRuntimeConfig()
@@ -84,7 +85,6 @@ async function sendCommand() {
   const cmd = input.value.trim()
   if (!cmd || !props.sessionId) return
 
-  // 履歴に追加
   history.value.unshift(cmd)
   historyIndex.value = -1
   input.value = ''
@@ -93,12 +93,15 @@ async function sendCommand() {
   loading.value = true
 
   try {
-    const res = await $fetch<{ output: string; success: boolean; graph: unknown }>(
+    const res = await $fetch<{ output: string; success: boolean; graph: GraphData; missionCompleted: boolean }>(
       `${config.public.apiBase}/terminal/sessions/${props.sessionId}/exec`,
-      { method: 'POST', body: { command: cmd } }
+      { method: 'POST', body: { command: cmd, missionId: props.missionId } }
     )
     log.value.push({ type: res.success ? 'output' : 'error', text: res.output })
     emit('graphUpdated', res.graph)
+    if (res.missionCompleted) {
+      emit('missionCompleted')
+    }
   } catch {
     log.value.push({ type: 'error', text: 'サーバーエラーが発生しました' })
   } finally {

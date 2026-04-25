@@ -69,12 +69,6 @@
             <h3 class="font-semibold text-gray-100">{{ mission.title }}</h3>
             <p class="text-sm text-gray-400 leading-relaxed flex-1">{{ mission.description }}</p>
 
-            <!-- ヒント -->
-            <div class="bg-gray-800 rounded-lg px-3 py-2 flex items-center gap-2">
-              <span class="text-xs text-gray-500">ヒント:</span>
-              <code class="text-xs text-green-400 font-mono">{{ mission.hint }}</code>
-            </div>
-
             <!-- ボタン -->
             <NuxtLink
               :to="`/missions/${mission.id}`"

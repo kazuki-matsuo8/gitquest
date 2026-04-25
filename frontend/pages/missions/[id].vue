@@ -43,20 +43,8 @@
           </div>
         </div>
 
-        <!-- 完了ボタン -->
-        <button
-          v-if="progressStatus !== 'COMPLETED'"
-          :disabled="completing"
-          class="text-sm font-semibold px-4 py-2 rounded-xl transition-all"
-          :class="progressStatus === 'IN_PROGRESS'
-            ? 'bg-green-600 hover:bg-green-500 text-white'
-            : 'bg-gray-800 hover:bg-gray-700 text-gray-300'"
-          @click="handleComplete"
-        >
-          {{ completing ? '記録中...' : 'ミッション完了' }}
-        </button>
         <span
-          v-else
+          v-if="progressStatus === 'COMPLETED'"
           class="text-sm font-semibold px-4 py-2 rounded-xl bg-green-600/20 text-green-400"
         >
           完了済み
@@ -72,9 +60,20 @@
         <!-- ミッション説明カード -->
         <div v-if="mission" class="bg-gray-900 border border-gray-800 rounded-xl p-5 shrink-0">
           <p class="text-gray-300 text-sm leading-relaxed mb-3">{{ mission.description }}</p>
-          <div class="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-2">
-            <span class="text-xs text-gray-500">ヒント:</span>
-            <code class="text-xs text-green-400 font-mono">{{ mission.hint }}</code>
+
+          <!-- ヒント（デフォルト非表示） -->
+          <div>
+            <button
+              class="text-xs text-gray-500 hover:text-gray-300 transition-colors flex items-center gap-1"
+              @click="showHint = !showHint"
+            >
+              <span>{{ showHint ? '▼' : '▶' }}</span>
+              <span>ヒントを{{ showHint ? '隠す' : '見る' }}</span>
+            </button>
+            <div v-if="showHint" class="mt-2 flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-2">
+              <span class="text-xs text-gray-500">ヒント:</span>
+              <code class="text-xs text-green-400 font-mono">{{ mission.hint }}</code>
+            </div>
           </div>
         </div>
 
@@ -82,7 +81,9 @@
         <div class="flex-1 min-h-0">
           <TerminalPane
             :session-id="sessionId"
+            :mission-id="missionId"
             @graph-updated="onGraphUpdated"
+            @mission-completed="onMissionCompleted"
           />
         </div>
       </div>
@@ -120,7 +121,6 @@ const config = useRuntimeConfig()
 const auth = useAuthStore()
 const missionId = route.params.id as string
 
-// ミッション情報を取得
 const { data: missionsByLevel } = await useFetch<Record<string, Mission[]>>(
   `${config.public.apiBase}/missions`
 )
@@ -133,8 +133,8 @@ const mission = computed(() => {
   return null
 })
 
-// 進捗状態
 const progressStatus = ref<string>('NOT_STARTED')
+const showHint = ref(false)
 
 async function fetchProgress() {
   if (!auth.token) return
@@ -145,7 +145,6 @@ async function fetchProgress() {
   progressStatus.value = found?.status ?? 'NOT_STARTED'
 }
 
-// ターミナルセッション
 const sessionId = ref<string | null>(null)
 
 async function createSession() {
@@ -155,7 +154,6 @@ async function createSession() {
   )
   sessionId.value = res.sessionId
 
-  // セッション作成と同時に「開始中」にする
   if (auth.token && progressStatus.value === 'NOT_STARTED') {
     await $fetch(`${config.public.apiBase}/progress/${missionId}/start`, {
       method: 'POST',
@@ -165,20 +163,18 @@ async function createSession() {
   }
 }
 
-// グラフデータ
 const graphData = ref<GraphData | null>(null)
 
-function onGraphUpdated(graph: unknown) {
-  graphData.value = graph as GraphData
+function onGraphUpdated(graph: GraphData) {
+  graphData.value = graph
 }
 
-// ミッション完了
-const completing = ref(false)
 const showCelebration = ref(false)
 
-async function handleComplete() {
-  if (!auth.token || completing.value) return
-  completing.value = true
+async function onMissionCompleted() {
+  if (progressStatus.value === 'COMPLETED') return
+  if (!auth.token) return
+
   try {
     await $fetch(`${config.public.apiBase}/progress/${missionId}/complete`, {
       method: 'POST',
@@ -187,13 +183,10 @@ async function handleComplete() {
     progressStatus.value = 'COMPLETED'
     showCelebration.value = true
   } catch {
-    // 失敗しても静かに無視
-  } finally {
-    completing.value = false
+    // 静かに無視
   }
 }
 
-// ページを離れるときにセッションを破棄
 onUnmounted(async () => {
   if (sessionId.value) {
     await $fetch(`${config.public.apiBase}/terminal/sessions/${sessionId.value}`, {

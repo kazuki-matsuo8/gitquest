@@ -37,6 +37,6 @@ public class TerminalController {
             @PathVariable String sessionId,
             @RequestBody TerminalCommandRequest request
     ) {
-        return ResponseEntity.ok(terminalService.execute(sessionId, request.command()));
+        return ResponseEntity.ok(terminalService.execute(sessionId, request.command(), request.missionId()));
     }
 }
