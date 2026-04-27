@@ -3,6 +3,7 @@ package com.gitquest.backend.controller;
 import com.gitquest.backend.dto.progress.ProgressResponse;
 import com.gitquest.backend.service.ProgressService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.lang.NonNull;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -26,13 +27,13 @@ public class ProgressController {
 
     // POST /api/progress/{missionId}/start → ミッション開始
     @PostMapping("/{missionId}/start")
-    public ResponseEntity<ProgressResponse> start(@PathVariable UUID missionId) {
+    public ResponseEntity<ProgressResponse> start(@PathVariable @NonNull UUID missionId) {
         return ResponseEntity.ok(progressService.start(missionId));
     }
 
     // POST /api/progress/{missionId}/complete → ミッション完了
     @PostMapping("/{missionId}/complete")
-    public ResponseEntity<ProgressResponse> complete(@PathVariable UUID missionId) {
+    public ResponseEntity<ProgressResponse> complete(@PathVariable @NonNull UUID missionId) {
         return ResponseEntity.ok(progressService.complete(missionId));
     }
 }

@@ -3,6 +3,7 @@ package com.gitquest.backend.controller;
 import com.gitquest.backend.dto.mission.MissionResponse;
 import com.gitquest.backend.service.MissionService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.lang.NonNull;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -27,7 +28,7 @@ public class MissionController {
 
     // GET /api/missions/{id} → ミッション詳細（ステップ付き）
     @GetMapping("/{id}")
-    public ResponseEntity<MissionResponse> getById(@PathVariable UUID id) {
+    public ResponseEntity<MissionResponse> getById(@PathVariable @NonNull UUID id) {
         return ResponseEntity.ok(missionService.getById(id));
     }
 }

@@ -8,6 +8,7 @@ import com.gitquest.backend.repository.MissionRepository;
 import com.gitquest.backend.repository.UserProgressRepository;
 import com.gitquest.backend.repository.UserRepository;
 import com.gitquest.backend.security.SecurityUtil;
+import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,7 +45,7 @@ public class ProgressService {
 
     // ミッションを「開始中」にする
     @Transactional
-    public ProgressResponse start(UUID missionId) {
+    public ProgressResponse start(@NonNull UUID missionId) {
         User user = getCurrentUser();
         Mission mission = getMission(missionId);
 
@@ -63,7 +64,7 @@ public class ProgressService {
 
     // ミッションを「完了」にする
     @Transactional
-    public ProgressResponse complete(UUID missionId) {
+    public ProgressResponse complete(@NonNull UUID missionId) {
         User user = getCurrentUser();
         Mission mission = getMission(missionId);
 
@@ -87,7 +88,7 @@ public class ProgressService {
                 .orElseThrow(() -> new IllegalStateException("ログインユーザーが見つかりません"));
     }
 
-    private Mission getMission(UUID missionId) {
+    private Mission getMission(@NonNull UUID missionId) {
         return missionRepository.findById(missionId)
                 .orElseThrow(() -> new IllegalArgumentException("ミッションが見つかりません"));
     }

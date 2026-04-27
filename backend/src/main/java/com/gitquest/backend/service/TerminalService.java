@@ -83,7 +83,7 @@ public class TerminalService {
     // ミッションの完了条件を満たしているか判定する
     private boolean checkMissionCompleted(Path workDir, GraphData graph, String command, String missionIdStr) {
         try {
-            UUID missionId = UUID.fromString(missionIdStr);
+            UUID missionId = Objects.requireNonNull(UUID.fromString(missionIdStr));
             Mission mission = missionRepository.findById(missionId).orElse(null);
             if (mission == null) return false;
 

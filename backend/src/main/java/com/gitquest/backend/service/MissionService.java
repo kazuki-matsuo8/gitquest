@@ -2,6 +2,7 @@ package com.gitquest.backend.service;
 
 import com.gitquest.backend.dto.mission.MissionResponse;
 import com.gitquest.backend.repository.MissionRepository;
+import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,7 +31,7 @@ public class MissionService {
 
     // 指定 ID のミッション詳細（ステップ付き）を返す
     @Transactional(readOnly = true)
-    public MissionResponse getById(UUID id) {
+    public MissionResponse getById(@NonNull UUID id) {
         return missionRepository.findById(id)
                 .map(MissionResponse::from)
                 .orElseThrow(() -> new IllegalArgumentException("ミッションが見つかりません"));
