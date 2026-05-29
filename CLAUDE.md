@@ -31,7 +31,7 @@ Nuxt.js + Spring Boot + PostgreSQL で構成。
 | サービス | ポート |
 |---------|--------|
 | Nuxt.js (dev) | 3000 |
-| Spring Boot | 8080 |
+| Spring Boot | 8085 |
 | PostgreSQL | 5432 |
 
 ---
@@ -49,22 +49,76 @@ Nuxt.js + Spring Boot + PostgreSQL で構成。
 
 ---
 
-## Git フロー
+## Issue 駆動開発ルール（必ず守ること）
+
+> **Claude はコードに手を入れる前に必ず issue を確認・作成すること。**
+> issue なしで実装を始めることは禁止。
+
+### 作業開始前の手順
+
+```bash
+# 1. 未対応の issue を確認
+gh issue list
+
+# 2. 該当 issue がなければ作成
+gh issue create --title "タイトル" --body "概要" --label "feature"
+
+# 3. ブランチを切る
+git checkout -b feature/#{issue番号}-{機能名}
+```
+
+### 作業中
+
+```bash
+# コミットには必ず issue 番号を含める
+git commit -m "feat: 機能の説明 (#{issue番号})"
+```
+
+### 作業完了時
+
+```bash
+# issue をクローズ（コメント付き）
+gh issue close {番号} --comment "実装内容の一言メモ"
+
+# main に push
+git push origin {ブランチ名}
+
+# PR を作成（必要に応じて）
+gh pr create --title "..." --body "Closes #{issue番号}"
+```
 
 ### ブランチ命名
+
 ```
-feature/#{issue番号}-{機能名}
-fix/#{issue番号}-{バグ名}
-chore/{作業名}
+feature/#{issue番号}-{機能名}   例: feature/#22-user-profile
+fix/#{issue番号}-{バグ名}       例: fix/#23-graph-render
+chore/{作業名}                  例: chore/update-deps
 ```
 
 ### コミットメッセージ
+
 ```
 feat: 機能の説明 (#{issue番号})
 fix: バグ修正 (#{issue番号})
 chore: 設定変更
 docs: ドキュメント変更
 ```
+
+### Milestone の管理
+
+```bash
+# 現在の Milestone 一覧
+gh api repos/kazuki-matsuo8/gitquest/milestones
+
+# Milestone が完了したらクローズ
+gh api --method PATCH repos/kazuki-matsuo8/gitquest/milestones/{番号} -f state=closed
+```
+
+### 重要な注意
+
+- **直接 main に push しない** — ブランチ → PR → merge の流れを守る
+- **複数機能を 1 issue にまとめない** — 1 issue = 1 目的
+- **遡及 issue は OK** — 作業後に issue を作ってすぐクローズしても履歴として残す
 
 ---
 
