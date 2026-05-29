@@ -1,215 +1,319 @@
 package com.gitquest.backend.service;
 
-import com.gitquest.backend.dto.terminal.TerminalCommandResponse;
+import com.gitquest.backend.dto.terminal.SessionCreateResponse;
 import com.gitquest.backend.dto.terminal.TerminalCommandResponse.BranchRef;
 import com.gitquest.backend.dto.terminal.TerminalCommandResponse.CommitNode;
 import com.gitquest.backend.dto.terminal.TerminalCommandResponse.GraphData;
 import com.gitquest.backend.entity.Mission;
 import com.gitquest.backend.repository.MissionRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.web.socket.BinaryMessage;
+import org.springframework.web.socket.WebSocketSession;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.io.*;
+import java.nio.ByteBuffer;
+import java.nio.file.*;
+import java.io.FileOutputStream;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 @Service
 public class TerminalService {
 
-    private final Map<String, Path> sessions = new ConcurrentHashMap<>();
     private final MissionRepository missionRepository;
 
     public TerminalService(MissionRepository missionRepository) {
         this.missionRepository = missionRepository;
     }
 
-    // 許可コマンドプレフィックス（セキュリティ: 学習に必要なコマンドのみ）
-    private static final Set<String> ALLOWED_COMMANDS = Set.of(
-            "git init", "git add", "git commit", "git branch",
-            "git checkout", "git switch", "git merge", "git log",
-            "git diff", "git status", "git reset", "git restore",
-            "ls", "touch", "echo", "mkdir", "cat", "rm"
-    );
+    private record PendingSession(Path workDir, String setupMessage) {}
+    private record PtySession(Path workDir, Process process, Path resizeFifo) {}
 
-    public String createSession() {
+    private final Map<String, PendingSession>   pendingSessions = new ConcurrentHashMap<>();
+    private final Map<String, PtySession>       activeSessions  = new ConcurrentHashMap<>();
+    private final Map<String, WebSocketSession> wsSessions      = new ConcurrentHashMap<>();
+
+    // ptyhelper.py のパス (初回抽出後にキャッシュ)
+    private volatile Path helperScriptPath;
+
+    // ────────────────────────────────────────────
+    // セッション作成 (HTTP POST)
+    // ────────────────────────────────────────────
+
+    public SessionCreateResponse createSession(String missionId) {
         String sessionId = UUID.randomUUID().toString();
         try {
             Path workDir = Files.createTempDirectory("gitquest-" + sessionId.substring(0, 8));
-            sessions.put(sessionId, workDir);
-            return sessionId;
+            String setupMessage = setupMissionEnvironment(workDir, missionId);
+            pendingSessions.put(sessionId, new PendingSession(workDir, setupMessage));
+            return new SessionCreateResponse(sessionId, setupMessage);
         } catch (IOException e) {
             throw new IllegalStateException("セッションの作成に失敗しました", e);
         }
     }
 
+    // ────────────────────────────────────────────
+    // WebSocket 接続時に PTY を起動
+    // ────────────────────────────────────────────
+
+    public void attachWebSocket(String sessionId, WebSocketSession ws) {
+        PendingSession pending = pendingSessions.remove(sessionId);
+        if (pending == null) return;
+
+        try {
+            Path workDir  = pending.workDir();
+            Path initFile = workDir.resolve(".bash_init");
+            Files.writeString(initFile, buildInitScript(pending.setupMessage()));
+
+            // resize 用 FIFO を作成
+            Path resizeFifo = workDir.resolve(".resize_pipe");
+            new ProcessBuilder("mkfifo", resizeFifo.toString())
+                    .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                    .redirectError(ProcessBuilder.Redirect.DISCARD)
+                    .start().waitFor();
+
+            // ptyhelper.py をクラスパスから抽出
+            Path helper = getHelperScript();
+
+            Map<String, String> env = new HashMap<>(System.getenv());
+            env.put("TERM",                  "xterm-256color");
+            env.put("COLORTERM",             "truecolor");
+            env.put("FORCE_COLOR",           "1");
+            env.put("GIT_PAGER",             "cat");
+            env.put("GIT_AUTHOR_NAME",       "GitQuest User");
+            env.put("GIT_AUTHOR_EMAIL",      "user@gitquest.local");
+            env.put("GIT_COMMITTER_NAME",    "GitQuest User");
+            env.put("GIT_COMMITTER_EMAIL",   "user@gitquest.local");
+
+            // ptyhelper.py: bash を PTY 内で起動し stdin/stdout を仲介する
+            ProcessBuilder pb = new ProcessBuilder(
+                    "python3", helper.toString(),
+                    initFile.toString(),
+                    resizeFifo.toString(),
+                    "200", "50");
+            pb.environment().putAll(env);
+            pb.directory(workDir.toFile());
+
+            Process process = pb.start();
+            activeSessions.put(sessionId, new PtySession(workDir, process, resizeFifo));
+            wsSessions.put(sessionId, ws);
+
+            // PTY → WebSocket のストリーミング
+            Thread.ofVirtual().start(() -> streamOutput(sessionId, process, ws));
+
+        } catch (Exception e) {
+            sendError(ws, "PTY の起動に失敗しました: " + e.getMessage());
+        }
+    }
+
+    // PTY 出力を WebSocket に転送し続ける
+    private void streamOutput(String sessionId, Process process, WebSocketSession ws) {
+        byte[] buf = new byte[4096];
+        InputStream in = process.getInputStream();
+        try {
+            int n;
+            while ((n = in.read(buf)) != -1) {
+                if (!ws.isOpen()) break;
+                byte[] chunk = Arrays.copyOf(buf, n);
+                synchronized (ws) {
+                    ws.sendMessage(new BinaryMessage(ByteBuffer.wrap(chunk)));
+                }
+            }
+        } catch (IOException ignored) {
+        } finally {
+            deleteSession(sessionId);
+        }
+    }
+
+    // ────────────────────────────────────────────
+    // PTY 操作
+    // ────────────────────────────────────────────
+
+    public void writeToSession(String sessionId, byte[] data) {
+        PtySession session = activeSessions.get(sessionId);
+        if (session == null) return;
+        try {
+            OutputStream out = session.process().getOutputStream();
+            out.write(data);
+            out.flush();
+        } catch (IOException ignored) {}
+    }
+
+    public void resizeSession(String sessionId, int cols, int rows) {
+        PtySession session = activeSessions.get(sessionId);
+        if (session == null) return;
+        // FIFO への書き込みはブロックする可能性があるためバーチャルスレッドで実行
+        Thread.ofVirtual().start(() -> {
+            try {
+                byte[] data = (cols + " " + rows + "\n").getBytes();
+                try (FileOutputStream fos = new FileOutputStream(session.resizeFifo().toFile())) {
+                    fos.write(data);
+                }
+            } catch (IOException ignored) {}
+        });
+    }
+
+    // ────────────────────────────────────────────
+    // グラフ取得 (HTTP GET)
+    // ────────────────────────────────────────────
+
+    public GraphData getGraph(String sessionId) {
+        PtySession session = activeSessions.get(sessionId);
+        if (session != null) return buildGraph(session.workDir());
+
+        PendingSession pending = pendingSessions.get(sessionId);
+        if (pending != null) return buildGraph(pending.workDir());
+
+        return emptyGraph();
+    }
+
+    // ────────────────────────────────────────────
+    // セッション削除
+    // ────────────────────────────────────────────
+
     public void deleteSession(String sessionId) {
-        Path workDir = sessions.remove(sessionId);
-        if (workDir != null) {
-            deleteDirectory(workDir);
+        pendingSessions.remove(sessionId);
+        wsSessions.remove(sessionId);
+
+        PtySession session = activeSessions.remove(sessionId);
+        if (session != null) {
+            session.process().destroy();
+            deleteDirectory(session.workDir());
         }
     }
 
-    public TerminalCommandResponse execute(String sessionId, String command, String missionId) {
-        Path workDir = sessions.get(sessionId);
-        if (workDir == null) {
-            return new TerminalCommandResponse("セッションが見つかりません", false, emptyGraph(), false);
-        }
+    // ────────────────────────────────────────────
+    // 内部ユーティリティ
+    // ────────────────────────────────────────────
 
-        String trimmed = command.trim();
-        if (!isAllowed(trimmed)) {
-            return new TerminalCommandResponse(
-                    "このコマンドは使用できません。git コマンドや基本的なファイル操作を入力してください。",
-                    false,
-                    emptyGraph(),
-                    false
-            );
+    private Path getHelperScript() throws IOException {
+        if (helperScriptPath != null && Files.exists(helperScriptPath)) {
+            return helperScriptPath;
         }
+        InputStream src = getClass().getClassLoader().getResourceAsStream("ptyhelper.py");
+        if (src == null) throw new IOException("ptyhelper.py がクラスパスに見つかりません");
 
-        try {
-            String output = runCommand(workDir, trimmed);
-            GraphData graph = buildGraph(workDir);
-            boolean completed = missionId != null && checkMissionCompleted(workDir, graph, trimmed, missionId);
-            return new TerminalCommandResponse(output, true, graph, completed);
-        } catch (IOException | InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return new TerminalCommandResponse("コマンドの実行に失敗しました: " + e.getMessage(), false, emptyGraph(), false);
-        }
+        Path tmp = Files.createTempFile("ptyhelper-", ".py");
+        Files.copy(src, tmp, StandardCopyOption.REPLACE_EXISTING);
+        tmp.toFile().setExecutable(true);
+        helperScriptPath = tmp;
+        return tmp;
     }
 
-    // ミッションの完了条件を満たしているか判定する
-    private boolean checkMissionCompleted(Path workDir, GraphData graph, String command, String missionIdStr) {
+    private String buildInitScript(String setupMessage) {
+        String escapedMsg = setupMessage.replace("'", "'\"'\"'");
+        return """
+                export TERM=xterm-256color COLORTERM=truecolor FORCE_COLOR=1 GIT_PAGER=cat
+                export GIT_AUTHOR_NAME='GitQuest User' GIT_AUTHOR_EMAIL='user@gitquest.local'
+                export GIT_COMMITTER_NAME='GitQuest User' GIT_COMMITTER_EMAIL='user@gitquest.local'
+                PS1='\\[\\e[32m\\]\\w\\[\\e[0m\\] \\[\\e]9999;ready\\a\\]\\$ '
+                printf '\\033[32m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\033[0m\\n'
+                printf '\\033[1;32m  GitQuest ターミナル (本物の Git 環境)\\033[0m\\n'
+                printf '\\033[32m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\033[0m\\n'
+                printf '\\033[33m%%s\\033[0m\\n' '%s'
+                printf '\\033[32m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\033[0m\\n\\n'
+                """.formatted(escapedMsg);
+    }
+
+    private String setupMissionEnvironment(Path workDir, String missionId) {
+        if (missionId == null) return "git init からはじめてみよう。";
         try {
-            UUID missionId = Objects.requireNonNull(UUID.fromString(missionIdStr));
-            Mission mission = missionRepository.findById(missionId).orElse(null);
-            if (mission == null) return false;
-
-            int level = mission.getLevel();
-            int order = mission.getOrderIndex();
-
-            return switch (level) {
-                case 1 -> switch (order) {
-                    // git init → .git ディレクトリが存在すればOK
-                    case 1 -> Files.exists(workDir.resolve(".git"));
-                    // git add → ステージされたファイルがあればOK
-                    case 2 -> hasStagedFiles(workDir);
-                    // git commit → コミットが1件以上あればOK
-                    case 3 -> !graph.commits().isEmpty();
-                    default -> false;
-                };
-                case 2 -> switch (order) {
-                    // ブランチを作ろう → main/master 以外のブランチが存在する
-                    case 1 -> graph.branches().stream()
-                            .anyMatch(b -> !b.name().equals("main") && !b.name().equals("master")
-                                    && !b.name().startsWith("HEAD"));
-                    // ブランチを切り替えよう → 現在のブランチが main/master でない
-                    case 2 -> {
-                        String currentBranch = getCurrentBranch(workDir);
-                        yield currentBranch != null && !currentBranch.equals("main") && !currentBranch.equals("master");
-                    }
-                    // ブランチをマージしよう → main/master にコミットが2件以上（マージ後）
-                    case 3 -> {
-                        long mainCommits = graph.commits().stream()
-                                .filter(c -> !c.parents().isEmpty())
-                                .count();
-                        yield graph.commits().size() >= 2 && mainCommits >= 1;
-                    }
-                    default -> false;
-                };
-                case 3 -> switch (order) {
-                    // git log を実行したか（コマンドプレフィックスで判定）
-                    case 1 -> command.startsWith("git log");
-                    // git diff を実行したか
-                    case 2 -> command.startsWith("git diff");
-                    // git status を実行したか
-                    case 3 -> command.startsWith("git status");
-                    default -> false;
-                };
-                default -> false;
-            };
+            Mission mission = missionRepository.findById(UUID.fromString(missionId)).orElse(null);
+            if (mission == null) return "git init からはじめてみよう。";
+            return setupByLevel(workDir, mission.getLevel(), mission.getOrderIndex());
         } catch (Exception e) {
-            return false;
+            return "git init からはじめてみよう。";
         }
     }
 
-    private boolean hasStagedFiles(Path workDir) throws IOException, InterruptedException {
-        String status = runCommand(workDir, "git status --porcelain");
-        if (status.equals("(出力なし)")) return false;
-        // 行頭が A, M, D など（インデックスに変更がある行）があればステージ済み
-        return Arrays.stream(status.split("\n"))
-                .anyMatch(line -> line.length() >= 2 && line.charAt(0) != ' ' && line.charAt(0) != '?');
+    private String setupByLevel(Path workDir, int level, int order) throws IOException, InterruptedException {
+        if (level == 1 && order == 1)
+            return "このフォルダを Git リポジトリとして初期化してください。";
+
+        Files.writeString(workDir.resolve("README.md"),
+                "# GitQuest へようこそ\n\nここで Git を学びましょう。\n");
+        runSetup(workDir, "git init");
+
+        if (level == 1 && order == 2)
+            return "README.md が作成されています。\nこのファイルをステージングエリアに追加してください。";
+
+        runSetup(workDir, "git add .");
+
+        if (level == 1 && order == 3)
+            return "ファイルがステージ済みの状態です。\n現在の変更をコミットして記録してください。";
+
+        runSetup(workDir, "git commit -m \"initial commit\"");
+
+        if (level == 2 && order == 1)
+            return "1 つコミットがある状態です。\nここから新しいブランチを作成してください。";
+
+        runSetup(workDir, "git branch feature");
+
+        if (level == 2 && order == 2)
+            return "feature ブランチが作成されています。\nそのブランチに切り替えて作業を開始してください。";
+
+        runSetup(workDir, "git checkout feature");
+        Files.writeString(workDir.resolve("feature.txt"), "feature ブランチのファイル\n");
+        runSetup(workDir, "git add .");
+        runSetup(workDir, "git commit -m \"add feature file\"");
+        runSetup(workDir, "git checkout main");
+
+        if (level == 2 && order == 3)
+            return "feature ブランチに変更が加わっています (現在 main にいます)。\nそのブランチの変更を main に取り込んでください。";
+
+        runSetup(workDir, "git merge feature");
+        Files.writeString(workDir.resolve("README.md"),
+                "# GitQuest へようこそ\n\nここで Git を学びましょう。\n\n## 更新\n\nこの変更はまだステージされていません。\n");
+
+        return switch (order) {
+            case 1 -> "2 つのコミットがある状態です。\nこれまでの変更履歴を確認してください。";
+            case 2 -> "README.md に未ステージの変更があります。\n何が変わったのかを確認してください。";
+            default -> "README.md に未ステージの変更があります。\nリポジトリの現在の状態を確認してください。";
+        };
     }
 
-    private String getCurrentBranch(Path workDir) {
-        try {
-            String result = runCommand(workDir, "git rev-parse --abbrev-ref HEAD");
-            return result.equals("(出力なし)") ? null : result.trim();
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private String runCommand(Path workDir, String command) throws IOException, InterruptedException {
-        List<String> args = new ArrayList<>();
-        args.add("/bin/sh");
-        args.add("-c");
-
-        String envPrefix = "GIT_AUTHOR_NAME='GitQuest User' GIT_AUTHOR_EMAIL='user@gitquest.local' "
-                + "GIT_COMMITTER_NAME='GitQuest User' GIT_COMMITTER_EMAIL='user@gitquest.local' ";
-        args.add(envPrefix + command);
-
-        ProcessBuilder pb = new ProcessBuilder(args);
+    private void runSetup(Path workDir, String command) throws IOException, InterruptedException {
+        ProcessBuilder pb = new ProcessBuilder(
+                "/bin/sh", "-c",
+                "GIT_AUTHOR_NAME='GitQuest User' GIT_AUTHOR_EMAIL='user@gitquest.local' "
+                + "GIT_COMMITTER_NAME='GitQuest User' GIT_COMMITTER_EMAIL='user@gitquest.local' "
+                + command);
         pb.directory(workDir.toFile());
-        pb.redirectErrorStream(true);
-
-        Process process = pb.start();
-        String output;
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-            output = reader.lines().collect(Collectors.joining("\n"));
-        }
-        process.waitFor();
-        return output.isBlank() ? "(出力なし)" : output;
+        pb.redirectOutput(ProcessBuilder.Redirect.DISCARD);
+        pb.redirectError(ProcessBuilder.Redirect.DISCARD);
+        pb.start().waitFor();
     }
 
     private GraphData buildGraph(Path workDir) {
         try {
-            if (!Files.exists(workDir.resolve(".git"))) {
-                return emptyGraph();
-            }
+            if (!Files.exists(workDir.resolve(".git"))) return emptyGraph();
 
-            String logFormat = "--format=%H|%h|%s|%an|%ci|%P";
-            String logOutput = runCommand(workDir, "git log --all \"" + logFormat + "\"");
-
+            String logOut = runCapture(workDir,
+                    "git log --all --format='%H|%h|%s|%an|%ci|%P'");
             List<CommitNode> commits = new ArrayList<>();
-            if (!logOutput.equals("(出力なし)") && !logOutput.isBlank()) {
-                for (String line : logOutput.split("\n")) {
-                    String[] parts = line.split("\\|", -1);
-                    if (parts.length < 5) continue;
-                    List<String> parents = parts.length >= 6 && !parts[5].isBlank()
-                            ? Arrays.asList(parts[5].trim().split(" "))
-                            : List.of();
-                    commits.add(new CommitNode(parts[0], parts[1], parts[2], parts[3], parts[4], parents));
+            if (!logOut.isBlank()) {
+                for (String line : logOut.split("\n")) {
+                    String[] p = line.split("\\|", -1);
+                    if (p.length < 5) continue;
+                    List<String> parents = p.length >= 6 && !p[5].isBlank()
+                            ? Arrays.asList(p[5].trim().split(" ")) : List.of();
+                    commits.add(new CommitNode(p[0], p[1], p[2], p[3], p[4], parents));
                 }
             }
 
-            String branchOutput = runCommand(workDir,
+            String branchOut = runCapture(workDir,
                     "git branch -a '--format=%(refname:short)|%(objectname)|%(HEAD)'");
             List<BranchRef> branches = new ArrayList<>();
-            if (!branchOutput.equals("(出力なし)") && !branchOutput.isBlank()) {
-                for (String line : branchOutput.split("\n")) {
-                    String[] parts = line.split("\\|", -1);
-                    if (parts.length < 3) continue;
-                    branches.add(new BranchRef(parts[0].trim(), parts[1].trim(), "*".equals(parts[2].trim())));
+            if (!branchOut.isBlank()) {
+                for (String line : branchOut.split("\n")) {
+                    String[] p = line.split("\\|", -1);
+                    if (p.length < 3) continue;
+                    branches.add(new BranchRef(p[0].trim(), p[1].trim(), "*".equals(p[2].trim())));
                 }
             }
 
-            String head = runCommand(workDir, "git rev-parse HEAD 2>/dev/null || echo ''").trim();
-            if (head.equals("(出力なし)")) head = "";
-
-            return new GraphData(commits, branches, head);
+            String head = runCapture(workDir, "git rev-parse HEAD 2>/dev/null || echo ''").trim();
+            return new GraphData(commits, branches, head, true);
 
         } catch (IOException | InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -217,22 +321,36 @@ public class TerminalService {
         }
     }
 
-    private boolean isAllowed(String command) {
-        String lower = command.toLowerCase();
-        return ALLOWED_COMMANDS.stream().anyMatch(lower::startsWith);
+    private String runCapture(Path workDir, String command) throws IOException, InterruptedException {
+        ProcessBuilder pb = new ProcessBuilder("/bin/sh", "-c", command);
+        pb.directory(workDir.toFile());
+        pb.redirectErrorStream(true);
+        Process p = pb.start();
+        String out;
+        try (var reader = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
+            out = reader.lines().collect(java.util.stream.Collectors.joining("\n"));
+        }
+        p.waitFor();
+        return out;
     }
 
     private GraphData emptyGraph() {
-        return new GraphData(List.of(), List.of(), "");
+        return new GraphData(List.of(), List.of(), "", false);
+    }
+
+    private void sendError(WebSocketSession ws, String msg) {
+        try {
+            synchronized (ws) {
+                ws.sendMessage(new BinaryMessage(
+                        ("\r\n\033[31m" + msg + "\033[0m\r\n").getBytes()));
+            }
+        } catch (IOException ignored) {}
     }
 
     private void deleteDirectory(Path path) {
         try {
-            Files.walk(path)
-                    .sorted(Comparator.reverseOrder())
-                    .forEach(p -> {
-                        try { Files.delete(p); } catch (IOException ignored) {}
-                    });
+            Files.walk(path).sorted(Comparator.reverseOrder())
+                    .forEach(p -> { try { Files.delete(p); } catch (IOException ignored) {} });
         } catch (IOException ignored) {}
     }
 }

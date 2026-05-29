@@ -70,17 +70,32 @@
             <p class="text-sm text-gray-400 leading-relaxed flex-1">{{ mission.description }}</p>
 
             <!-- ボタン -->
+            <!-- 完了済み: 解説を見る + 再挑戦 の 2 ボタン -->
+            <div v-if="progressStatus(mission.id) === 'COMPLETED'" class="mt-1 flex gap-2">
+              <NuxtLink
+                :to="`/missions/${mission.id}/learn`"
+                class="flex-1 text-sm font-semibold py-2.5 rounded-xl transition-all text-center bg-gray-800 hover:bg-gray-700 text-gray-300"
+              >
+                解説を見る
+              </NuxtLink>
+              <NuxtLink
+                :to="`/missions/${mission.id}`"
+                class="flex-1 text-sm font-semibold py-2.5 rounded-xl transition-all text-center bg-green-600/20 text-green-400 hover:bg-green-600/30"
+              >
+                再挑戦
+              </NuxtLink>
+            </div>
+
+            <!-- 未着手・進行中: 解説ページへ -->
             <NuxtLink
-              :to="`/missions/${mission.id}`"
+              v-else
+              :to="`/missions/${mission.id}/learn`"
               class="mt-1 w-full text-sm font-semibold py-2.5 rounded-xl transition-all text-center block"
-              :class="progressStatus(mission.id) === 'COMPLETED'
-                ? 'bg-green-600/20 text-green-400 hover:bg-green-600/30'
-                : progressStatus(mission.id) === 'IN_PROGRESS'
-                  ? 'bg-blue-600 hover:bg-blue-500 text-white'
-                  : 'bg-gray-800 hover:bg-gray-700 text-gray-200'"
-              @click="progressStatus(mission.id) === 'NOT_STARTED' && handleStart(mission.id)"
+              :class="progressStatus(mission.id) === 'IN_PROGRESS'
+                ? 'bg-blue-600 hover:bg-blue-500 text-white'
+                : 'bg-gray-800 hover:bg-gray-700 text-gray-200'"
             >
-              {{ progressStatus(mission.id) === 'COMPLETED' ? '完了 — 再挑戦' : progressStatus(mission.id) === 'IN_PROGRESS' ? '続ける' : 'スタート' }}
+              {{ progressStatus(mission.id) === 'IN_PROGRESS' ? '続ける' : 'スタート' }}
             </NuxtLink>
           </div>
         </div>

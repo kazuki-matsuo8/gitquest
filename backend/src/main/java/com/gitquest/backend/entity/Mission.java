@@ -29,6 +29,9 @@ public class Mission {
     @Column(columnDefinition = "TEXT")
     private String hint;
 
+    @Column(name = "learning_content", columnDefinition = "TEXT")
+    private String learningContent;
+
     // ミッションのステップ一覧（順番通りに取得）
     @OneToMany(mappedBy = "mission", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
     @OrderBy("orderIndex ASC")
@@ -46,6 +49,7 @@ public class Mission {
     public String getTitle() { return title; }
     public String getDescription() { return description; }
     public String getHint() { return hint; }
+    public String getLearningContent() { return learningContent; }
     public List<MissionStep> getSteps() { return steps; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
 }

@@ -1,8 +1,8 @@
 package com.gitquest.backend.controller;
 
+import com.gitquest.backend.dto.terminal.SessionCreateRequest;
 import com.gitquest.backend.dto.terminal.SessionCreateResponse;
-import com.gitquest.backend.dto.terminal.TerminalCommandRequest;
-import com.gitquest.backend.dto.terminal.TerminalCommandResponse;
+import com.gitquest.backend.dto.terminal.TerminalCommandResponse.GraphData;
 import com.gitquest.backend.service.TerminalService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -17,26 +17,22 @@ public class TerminalController {
         this.terminalService = terminalService;
     }
 
-    // POST /api/terminal/sessions → 新しいターミナルセッションを作成
     @PostMapping("/sessions")
-    public ResponseEntity<SessionCreateResponse> createSession() {
-        String sessionId = terminalService.createSession();
-        return ResponseEntity.ok(new SessionCreateResponse(sessionId));
+    public ResponseEntity<SessionCreateResponse> createSession(
+            @RequestBody(required = false) SessionCreateRequest request
+    ) {
+        String missionId = request != null ? request.missionId() : null;
+        return ResponseEntity.ok(terminalService.createSession(missionId));
     }
 
-    // DELETE /api/terminal/sessions/{sessionId} → セッションを破棄（作業ディレクトリ削除）
     @DeleteMapping("/sessions/{sessionId}")
     public ResponseEntity<Void> deleteSession(@PathVariable String sessionId) {
         terminalService.deleteSession(sessionId);
         return ResponseEntity.noContent().build();
     }
 
-    // POST /api/terminal/sessions/{sessionId}/exec → コマンド実行
-    @PostMapping("/sessions/{sessionId}/exec")
-    public ResponseEntity<TerminalCommandResponse> execute(
-            @PathVariable String sessionId,
-            @RequestBody TerminalCommandRequest request
-    ) {
-        return ResponseEntity.ok(terminalService.execute(sessionId, request.command(), request.missionId()));
+    @GetMapping("/sessions/{sessionId}/graph")
+    public ResponseEntity<GraphData> getGraph(@PathVariable String sessionId) {
+        return ResponseEntity.ok(terminalService.getGraph(sessionId));
     }
 }

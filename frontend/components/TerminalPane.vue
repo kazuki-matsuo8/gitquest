@@ -16,11 +16,11 @@
       <div v-for="(entry, i) in log" :key="i">
         <div v-if="entry.type === 'input'" class="flex gap-2">
           <span class="text-green-400 shrink-0">$</span>
-          <span class="text-white">{{ entry.text }}</span>
+          <span class="text-white break-all">{{ entry.text }}</span>
         </div>
         <div
           v-else
-          class="whitespace-pre-wrap leading-relaxed"
+          class="whitespace-pre-wrap wrap-break-word leading-relaxed"
           :class="entry.type === 'error' ? 'text-red-400' : 'text-gray-300'"
         >{{ entry.text }}</div>
       </div>
@@ -57,6 +57,7 @@ import type { GraphData } from '~/types/terminal'
 const props = defineProps<{
   sessionId: string | null
   missionId: string
+  setupMessage?: string
 }>()
 
 const emit = defineEmits<{
@@ -72,7 +73,7 @@ interface LogEntry {
 }
 
 const log = ref<LogEntry[]>([
-  { type: 'output', text: 'GitQuest ターミナルへようこそ！\ngit init からはじめてみよう。' },
+  { type: 'output', text: props.setupMessage ?? 'GitQuest ターミナルへようこそ！\ngit init からはじめてみよう。' },
 ])
 const input = ref('')
 const loading = ref(false)
@@ -102,8 +103,10 @@ async function sendCommand() {
     if (res.missionCompleted) {
       emit('missionCompleted')
     }
-  } catch {
-    log.value.push({ type: 'error', text: 'サーバーエラーが発生しました' })
+  } catch (err: unknown) {
+    const data = (err as { data?: { message?: string } })?.data
+    const text = data?.message ?? 'サーバーエラーが発生しました'
+    log.value.push({ type: 'error', text })
   } finally {
     loading.value = false
     await nextTick()

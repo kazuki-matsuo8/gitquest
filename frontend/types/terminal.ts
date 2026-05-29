@@ -17,6 +17,7 @@ export interface GraphData {
   commits: CommitNode[]
   branches: BranchRef[]
   head: string
+  initialized: boolean
 }
 
 export interface TerminalCommandResponse {

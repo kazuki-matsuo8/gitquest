@@ -1,3 +1,3 @@
 package com.gitquest.backend.dto.terminal;
 
-public record SessionCreateResponse(String sessionId) {}
+public record SessionCreateResponse(String sessionId, String setupMessage) {}

@@ -12,6 +12,7 @@ public record MissionResponse(
         String title,
         String description,
         String hint,
+        String learningContent,
         List<MissionStepResponse> steps
 ) {
     public static MissionResponse from(Mission mission) {
@@ -22,6 +23,7 @@ public record MissionResponse(
                 mission.getTitle(),
                 mission.getDescription(),
                 mission.getHint(),
+                mission.getLearningContent(),
                 mission.getSteps().stream().map(MissionStepResponse::from).toList()
         );
     }

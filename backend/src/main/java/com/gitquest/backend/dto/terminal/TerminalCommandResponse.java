@@ -9,7 +9,8 @@ public record TerminalCommandResponse(
     public record GraphData(
             java.util.List<CommitNode> commits,
             java.util.List<BranchRef> branches,
-            String head  // 現在の HEAD が指すコミットハッシュ
+            String head,        // 現在の HEAD が指すコミットハッシュ
+            boolean initialized // .git ディレクトリが存在するか
     ) {}
 
     public record CommitNode(
