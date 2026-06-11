@@ -35,4 +35,16 @@ public class TerminalController {
     public ResponseEntity<GraphData> getGraph(@PathVariable String sessionId) {
         return ResponseEntity.ok(terminalService.getGraph(sessionId));
     }
+
+    // GET /api/terminal/sessions/{sessionId}/check?missionId=... → ミッション完了判定
+    @GetMapping("/sessions/{sessionId}/check")
+    public ResponseEntity<MissionCheckResponse> checkMission(
+            @PathVariable String sessionId,
+            @RequestParam String missionId
+    ) {
+        return ResponseEntity.ok(new MissionCheckResponse(
+                terminalService.checkMission(sessionId, missionId)));
+    }
+
+    public record MissionCheckResponse(boolean completed) {}
 }

@@ -224,45 +224,28 @@ async function fetchGraph() {
       `${config.public.apiBase}/terminal/sessions/${sessionId.value}/graph`
     )
     graphData.value = data
-    checkMissionCompletion(data)
+    await checkMissionCompletion()
   } catch {
     // 無視
   }
 }
 
 // ────────────────────────────────────────────
-// ミッション完了チェック
+// ミッション完了チェック (サーバーサイドで実状態を判定)
 // ────────────────────────────────────────────
 
-function checkMissionCompletion(graph: GraphData) {
-  if (!mission.value || progressStatus.value === 'COMPLETED') return
-  const { level, orderIndex } = mission.value
-
-  let completed = false
-  if (level === 1 && orderIndex === 1) {
-    completed = graph.initialized
-  } else if (level === 1 && orderIndex === 2) {
-    // ステージ済みファイルがある = コミット前なので branches が空でコミットも 0 だが initialized
-    // git add 後は graph の情報では判断できないため、commits が 0 かつ initialized で仮判定
-    completed = graph.initialized && graph.commits.length === 0
-  } else if (level === 1 && orderIndex === 3) {
-    completed = graph.commits.length >= 1
-  } else if (level === 2 && orderIndex === 1) {
-    // git branch <name> → mainブランチ以外のブランチが存在する
-    completed = graph.branches.some(b => b.name !== 'main' && b.name !== 'master')
-  } else if (level === 2 && orderIndex === 2) {
-    // git checkout feature → HEAD が main/master 以外
-    completed = graph.branches.some(b => b.isHead && b.name !== 'main' && b.name !== 'master')
-  } else if (level === 2 && orderIndex === 3) {
-    // git merge → マージコミット (parents が 2 つ以上)
-    completed = graph.commits.some(c => c.parents.length >= 2)
-  } else if (level === 3) {
-    // log/diff/status 確認ミッションはコミット数で判断
-    completed = graph.commits.length >= 2
-  }
-
-  if (completed) {
-    onMissionCompleted()
+async function checkMissionCompletion() {
+  if (!sessionId.value || progressStatus.value === 'COMPLETED') return
+  try {
+    const res = await $fetch<{ completed: boolean }>(
+      `${config.public.apiBase}/terminal/sessions/${sessionId.value}/check`,
+      { params: { missionId } }
+    )
+    if (res.completed) {
+      await onMissionCompleted()
+    }
+  } catch {
+    // 無視
   }
 }
 
