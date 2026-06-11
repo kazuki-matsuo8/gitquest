@@ -168,6 +168,98 @@ public class TerminalService {
     }
 
     // ────────────────────────────────────────────
+    // ミッション完了判定 (HTTP GET)
+    // ────────────────────────────────────────────
+
+    public boolean checkMission(String sessionId, String missionId) {
+        Path workDir = findWorkDir(sessionId);
+        if (workDir == null || missionId == null) return false;
+        try {
+            Mission mission = missionRepository.findById(UUID.fromString(missionId)).orElse(null);
+            if (mission == null) return false;
+            return checkByLevel(workDir, mission.getLevel(), mission.getOrderIndex());
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    // リポジトリの実状態 + コマンド履歴で完了条件を判定する
+    private boolean checkByLevel(Path workDir, int level, int order) throws IOException, InterruptedException {
+        boolean hasRepo = Files.exists(workDir.resolve(".git"));
+
+        if (level == 1) {
+            return switch (order) {
+                case 1 -> hasRepo;
+                // ステージ済みファイルがある (先にコミットまで進めた場合も OK とする)
+                case 2 -> hasRepo && (!runCapture(workDir, "git diff --cached --name-only").isBlank()
+                        || countCommits(workDir) >= 1);
+                default -> hasRepo && countCommits(workDir) >= 1;
+            };
+        }
+
+        if (level == 2) {
+            if (!hasRepo) return false;
+            return switch (order) {
+                case 1 -> hasBranchOtherThanMain(workDir);
+                case 2 -> {
+                    String cur = runCapture(workDir, "git rev-parse --abbrev-ref HEAD").trim();
+                    yield !cur.isBlank() && !cur.equals("main") && !cur.equals("master") && !cur.equals("HEAD");
+                }
+                // fast-forward マージも検出できるよう「feature が main に含まれたか」で判定
+                default -> runCapture(workDir,
+                        "git merge-base --is-ancestor feature main 2>/dev/null && echo yes || echo no")
+                        .trim().endsWith("yes");
+            };
+        }
+
+        if (level == 3) {
+            // 確認系コマンドは実行履歴 (.bash_history) で判定する
+            String history = readHistory(workDir);
+            return switch (order) {
+                case 1 -> history.contains("git log");
+                case 2 -> history.contains("git diff");
+                default -> history.contains("git status");
+            };
+        }
+
+        return false;
+    }
+
+    private Path findWorkDir(String sessionId) {
+        PtySession session = activeSessions.get(sessionId);
+        if (session != null) return session.workDir();
+        PendingSession pending = pendingSessions.get(sessionId);
+        return pending != null ? pending.workDir() : null;
+    }
+
+    private String readHistory(Path workDir) {
+        try {
+            Path hist = workDir.resolve(".bash_history");
+            return Files.exists(hist) ? Files.readString(hist) : "";
+        } catch (IOException e) {
+            return "";
+        }
+    }
+
+    private int countCommits(Path workDir) throws IOException, InterruptedException {
+        String out = runCapture(workDir, "git rev-list --all --count 2>/dev/null");
+        try {
+            return Integer.parseInt(out.trim());
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    private boolean hasBranchOtherThanMain(Path workDir) throws IOException, InterruptedException {
+        String out = runCapture(workDir, "git branch '--format=%(refname:short)'");
+        for (String line : out.split("\n")) {
+            String name = line.trim();
+            if (!name.isBlank() && !name.equals("main") && !name.equals("master")) return true;
+        }
+        return false;
+    }
+
+    // ────────────────────────────────────────────
     // セッション削除
     // ────────────────────────────────────────────
 
@@ -202,10 +294,14 @@ public class TerminalService {
 
     private String buildInitScript(String setupMessage) {
         String escapedMsg = setupMessage.replace("'", "'\"'\"'");
+        // HISTFILE: 実行したコマンドを作業ディレクトリに記録し、ミッション完了判定に使う
         return """
                 export TERM=xterm-256color COLORTERM=truecolor FORCE_COLOR=1 GIT_PAGER=cat
                 export GIT_AUTHOR_NAME='GitQuest User' GIT_AUTHOR_EMAIL='user@gitquest.local'
                 export GIT_COMMITTER_NAME='GitQuest User' GIT_COMMITTER_EMAIL='user@gitquest.local'
+                export HISTFILE="$PWD/.bash_history"
+                shopt -s histappend
+                PROMPT_COMMAND='history -a'
                 PS1='\\[\\e[32m\\]\\w\\[\\e[0m\\] \\[\\e]9999;ready\\a\\]\\$ '
                 printf '\\033[32m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\033[0m\\n'
                 printf '\\033[1;32m  GitQuest ターミナル (本物の Git 環境)\\033[0m\\n'
