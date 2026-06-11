@@ -173,6 +173,7 @@ function levelLabel(level: number): string {
     1: '入門 — 基本操作',
     2: '初級 — ブランチ操作',
     3: '中級 — 履歴・差分確認',
+    4: '上級 — 実践テクニック',
   }
   return labels[level] ?? `レベル ${level}`
 }
@@ -182,6 +183,7 @@ function levelBadgeClass(level: number): string {
     1: 'bg-green-500/15 text-green-400',
     2: 'bg-blue-500/15 text-blue-400',
     3: 'bg-purple-500/15 text-purple-400',
+    4: 'bg-orange-500/15 text-orange-400',
   }
   return classes[level] ?? 'bg-gray-700 text-gray-300'
 }
