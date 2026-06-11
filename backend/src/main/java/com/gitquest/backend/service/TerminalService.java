@@ -222,6 +222,22 @@ public class TerminalService {
             };
         }
 
+        if (level == 4) {
+            if (!hasRepo) return false;
+            return switch (order) {
+                // マージコミットが存在し、未解決 (unmerged) のファイルが残っていない
+                case 1 -> !runCapture(workDir, "git rev-list --merges --all 2>/dev/null").isBlank()
+                        && runCapture(workDir, "git ls-files -u").isBlank();
+                // 直前のコミットメッセージから打ち間違い (commt) が消えている
+                case 2 -> {
+                    String msg = runCapture(workDir, "git log -1 --format=%s 2>/dev/null").trim();
+                    yield !msg.isBlank() && !msg.contains("commt");
+                }
+                // Revert コミットが存在する
+                default -> runCapture(workDir, "git log --all --format=%s 2>/dev/null").contains("Revert");
+            };
+        }
+
         return false;
     }
 
@@ -323,6 +339,8 @@ public class TerminalService {
     }
 
     private String setupByLevel(Path workDir, int level, int order) throws IOException, InterruptedException {
+        if (level == 4) return setupLevel4(workDir, order);
+
         if (level == 1 && order == 1)
             return "このフォルダを Git リポジトリとして初期化してください。";
 
@@ -366,6 +384,42 @@ public class TerminalService {
             case 2 -> "README.md に未ステージの変更があります。\n何が変わったのかを確認してください。";
             default -> "README.md に未ステージの変更があります。\nリポジトリの現在の状態を確認してください。";
         };
+    }
+
+    // Lv4: 上級ミッション (コンフリクト / amend / revert) のセットアップ
+    private String setupLevel4(Path workDir, int order) throws IOException, InterruptedException {
+        if (order == 1) {
+            // main と feature で同じ行を別々に変更してコンフリクトを仕込む
+            Files.writeString(workDir.resolve("README.md"), "# メニュー\n\n今日のおすすめ: りんご\n");
+            runSetup(workDir, "git init");
+            runSetup(workDir, "git add .");
+            runSetup(workDir, "git commit -m \"initial commit\"");
+            runSetup(workDir, "git checkout -b feature");
+            Files.writeString(workDir.resolve("README.md"), "# メニュー\n\n今日のおすすめ: みかん\n");
+            runSetup(workDir, "git add .");
+            runSetup(workDir, "git commit -m \"おすすめをみかんに変更\"");
+            runSetup(workDir, "git checkout main");
+            Files.writeString(workDir.resolve("README.md"), "# メニュー\n\n今日のおすすめ: ばなな\n");
+            runSetup(workDir, "git add .");
+            runSetup(workDir, "git commit -m \"おすすめをばななに変更\"");
+            return "main と feature で README.md の同じ行が別々に変更されています。\nfeature をマージするとコンフリクトが発生するので、解決してマージを完了させてください。";
+        }
+        if (order == 2) {
+            Files.writeString(workDir.resolve("README.md"), "# GitQuest へようこそ\n");
+            runSetup(workDir, "git init");
+            runSetup(workDir, "git add .");
+            runSetup(workDir, "git commit -m \"initial commt\"");
+            return "直前のコミットメッセージに打ち間違いがあります (initial commt)。\nコミットをやり直して正しいメッセージに修正してください。";
+        }
+        // order 3: revert
+        Files.writeString(workDir.resolve("README.md"), "# GitQuest へようこそ\n");
+        runSetup(workDir, "git init");
+        runSetup(workDir, "git add .");
+        runSetup(workDir, "git commit -m \"initial commit\"");
+        Files.writeString(workDir.resolve("config.txt"), "DEBUG_MODE=true\n");
+        runSetup(workDir, "git add .");
+        runSetup(workDir, "git commit -m \"デバッグ設定を追加\"");
+        return "直前のコミット「デバッグ設定を追加」に問題がありました。\n履歴を残したまま、このコミットを打ち消してください。";
     }
 
     private void runSetup(Path workDir, String command) throws IOException, InterruptedException {
