@@ -5,7 +5,15 @@
       <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex items-center justify-between h-16">
           <!-- ロゴ -->
-          <NuxtLink to="/" class="flex items-center gap-2 text-green-400 hover:text-green-300 transition-colors">
+          <NuxtLink to="/" class="flex items-center gap-2.5 text-green-400 hover:text-green-300 transition-colors">
+            <svg viewBox="0 0 32 32" class="w-7 h-7" aria-hidden="true">
+              <rect width="32" height="32" rx="7" class="fill-gray-900" />
+              <path d="M10 11v10" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" />
+              <path d="M22 15.2c0 3.8-4.6 3.6-8.6 5.4" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" />
+              <circle cx="10" cy="8" r="3" class="fill-gray-900" stroke="currentColor" stroke-width="2.2" />
+              <circle cx="10" cy="24" r="3" class="fill-gray-900" stroke="currentColor" stroke-width="2.2" />
+              <circle cx="22" cy="12" r="3" class="fill-gray-900" stroke="currentColor" stroke-width="2.2" />
+            </svg>
             <span class="text-xl font-bold tracking-tight">GitQuest</span>
           </NuxtLink>
 
