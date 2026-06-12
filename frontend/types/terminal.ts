@@ -19,9 +19,3 @@ export interface GraphData {
   head: string
   initialized: boolean
 }
-
-export interface TerminalCommandResponse {
-  output: string
-  success: boolean
-  graph: GraphData
-}

@@ -42,12 +42,22 @@
             <h1 class="font-semibold text-gray-100 text-sm sm:text-base truncate">{{ mission.title }}</h1>
           </div>
         </div>
-        <span
-          v-if="progressStatus === 'COMPLETED'"
-          class="text-sm font-semibold px-4 py-2 rounded-xl bg-green-600/20 text-green-400 shrink-0"
-        >
-          完了済み
-        </span>
+        <div class="flex items-center gap-2 shrink-0">
+          <button
+            class="text-xs sm:text-sm font-medium px-3 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 transition-colors disabled:opacity-50"
+            :disabled="resetting || !sessionId"
+            title="作業内容を破棄して最初からやり直す"
+            @click="resetSession"
+          >
+            {{ resetting ? 'リセット中…' : '↺ 環境をリセット' }}
+          </button>
+          <span
+            v-if="progressStatus === 'COMPLETED'"
+            class="text-sm font-semibold px-4 py-2 rounded-xl bg-green-600/20 text-green-400"
+          >
+            完了済み
+          </span>
+        </div>
       </div>
     </div>
 
@@ -208,6 +218,27 @@ async function createSession() {
       headers: { Authorization: `Bearer ${auth.token}` },
     }).catch(() => {})
     progressStatus.value = 'IN_PROGRESS'
+  }
+}
+
+// 環境リセット: セッションを破棄して新しく作り直す
+const resetting = ref(false)
+
+async function resetSession() {
+  if (resetting.value || !sessionId.value) return
+  resetting.value = true
+  try {
+    await $fetch(`${config.public.apiBase}/terminal/sessions/${sessionId.value}`, {
+      method: 'DELETE',
+    }).catch(() => {})
+    const res = await $fetch<{ sessionId: string; setupMessage: string }>(
+      `${config.public.apiBase}/terminal/sessions`,
+      { method: 'POST', body: { missionId } }
+    )
+    sessionId.value = res.sessionId
+    graphData.value = null
+  } finally {
+    resetting.value = false
   }
 }
 
