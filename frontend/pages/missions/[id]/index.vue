@@ -9,7 +9,10 @@
         <div class="text-center px-8">
           <div class="text-6xl mb-4 animate-bounce">🎉</div>
           <h2 class="text-3xl font-bold text-green-400 mb-2">ミッション完了！</h2>
-          <p class="text-gray-300 mb-8">{{ mission?.title }}</p>
+          <p class="text-gray-300 mb-3">{{ mission?.title }}</p>
+          <p v-if="mission" class="inline-block text-sm font-bold text-yellow-400 bg-yellow-400/10 px-4 py-1.5 rounded-full mb-8">
+            +{{ xpForLevel(mission.level) }} XP 獲得！
+          </p>
           <div class="flex flex-col sm:flex-row gap-3 justify-center">
             <NuxtLink
               to="/missions"
@@ -148,6 +151,7 @@
 
 <script setup lang="ts">
 import { useAuthStore } from '~/stores/auth'
+import { xpForLevel } from '~/composables/useGameStats'
 import type { GraphData } from '~/types/terminal'
 
 definePageMeta({ middleware: ['auth'] })
