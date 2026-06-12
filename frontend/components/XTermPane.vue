@@ -22,6 +22,8 @@ let term: Terminal | null = null
 let fitAddon: FitAddon | null = null
 let ws: WebSocket | null = null
 let resizeObserver: ResizeObserver | null = null
+// 意図的な切断 (リセット・画面遷移) のときは「セッション終了」を表示しない
+let intentionalClose = false
 
 // ────────────────────────────────────────────
 // xterm.js 初期化
@@ -120,11 +122,16 @@ function connectWebSocket() {
   }
 
   ws.onclose = () => {
-    term?.writeln('\r\n\x1b[33m[セッション終了]\x1b[0m')
+    if (!intentionalClose) {
+      term?.writeln('\r\n\x1b[33m[セッション終了]\x1b[0m')
+    }
+    intentionalClose = false
   }
 
   ws.onerror = () => {
-    term?.writeln('\r\n\x1b[31m[接続エラー]\x1b[0m')
+    if (!intentionalClose) {
+      term?.writeln('\r\n\x1b[31m[接続エラー]\x1b[0m')
+    }
   }
 }
 
@@ -145,15 +152,17 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  intentionalClose = true
   resizeObserver?.disconnect()
   ws?.close()
   term?.dispose()
 })
 
-// sessionId が変わったら再接続
+// sessionId が変わったら再接続 (環境リセット時など)
 watch(() => props.sessionId, () => {
+  intentionalClose = true
   ws?.close()
-  term?.clear()
+  term?.reset()
   connectWebSocket()
 })
 </script>
