@@ -1,7 +1,7 @@
 <template>
   <main class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
     <!-- ヘッダー -->
-    <div class="mb-10">
+    <div class="mb-8">
       <p class="text-gray-400 text-sm mb-1">おかえり、</p>
       <h1 class="text-3xl font-bold">{{ auth.username }}</h1>
     </div>
@@ -12,6 +12,43 @@
     </div>
 
     <template v-else>
+      <!-- ランク & XP カード -->
+      <section class="mb-8 bg-gray-900 border border-gray-800 rounded-2xl p-6 sm:p-8 relative overflow-hidden">
+        <div class="absolute -top-16 -right-16 w-64 h-64 bg-green-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div class="relative flex flex-col sm:flex-row sm:items-center gap-6">
+          <!-- ランクアイコン -->
+          <div class="w-20 h-20 rounded-2xl bg-gray-800 border border-gray-700 flex items-center justify-center text-4xl shrink-0 mx-auto sm:mx-0">
+            {{ game.currentRank.value.icon }}
+          </div>
+          <div class="flex-1 text-center sm:text-left">
+            <p class="text-xs text-gray-500 mb-1 tracking-wide uppercase">現在のランク</p>
+            <h2 class="text-2xl font-bold text-gray-100 mb-3">{{ game.currentRank.value.name }}</h2>
+            <!-- XP バー -->
+            <div class="flex items-center gap-3">
+              <div class="flex-1 h-2.5 bg-gray-800 rounded-full overflow-hidden">
+                <div
+                  class="h-full bg-linear-to-r from-green-600 to-green-400 rounded-full transition-all duration-700"
+                  :style="{ width: `${game.rankProgress.value}%` }"
+                />
+              </div>
+              <span class="text-sm font-semibold text-green-400 shrink-0">{{ game.totalXp.value }} XP</span>
+            </div>
+            <p v-if="game.nextRank.value" class="text-xs text-gray-500 mt-2">
+              次のランク「{{ game.nextRank.value.icon }} {{ game.nextRank.value.name }}」まで
+              あと {{ game.nextRank.value.minXp - game.totalXp.value }} XP
+            </p>
+            <p v-else class="text-xs text-yellow-400 mt-2">最高ランク到達！おめでとう 🎉</p>
+          </div>
+          <!-- ストリーク -->
+          <div class="text-center bg-gray-800/60 border border-gray-700/50 rounded-2xl px-6 py-4 shrink-0 mx-auto sm:mx-0">
+            <p class="text-3xl font-bold" :class="game.streak.value > 0 ? 'text-orange-400' : 'text-gray-600'">
+              🔥 {{ game.streak.value }}
+            </p>
+            <p class="text-xs text-gray-500 mt-1">連続学習日数</p>
+          </div>
+        </div>
+      </section>
+
       <!-- サマリーカード -->
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
         <div
@@ -23,6 +60,30 @@
           <span class="text-xs text-gray-500">{{ stat.label }}</span>
         </div>
       </div>
+
+      <!-- バッジ (実績) -->
+      <section class="mb-10">
+        <div class="flex items-center justify-between mb-5">
+          <h2 class="text-lg font-semibold text-gray-200">実績バッジ</h2>
+          <span class="text-sm text-gray-500">{{ game.earnedBadgeCount.value }} / {{ game.badges.value.length }} 獲得</span>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+          <div
+            v-for="badge in game.badges.value"
+            :key="badge.id"
+            class="rounded-2xl p-5 border flex flex-col gap-2 transition-all"
+            :class="badge.earned
+              ? 'bg-gray-900 border-yellow-600/40 hover:border-yellow-500/60'
+              : 'bg-gray-900/40 border-gray-800 opacity-50'"
+          >
+            <span class="text-3xl" :class="{ grayscale: !badge.earned }">{{ badge.icon }}</span>
+            <p class="font-semibold text-sm" :class="badge.earned ? 'text-gray-100' : 'text-gray-500'">
+              {{ badge.name }}
+            </p>
+            <p class="text-xs text-gray-500 leading-relaxed">{{ badge.description }}</p>
+          </div>
+        </div>
+      </section>
 
       <!-- レベル別進捗 -->
       <section class="mb-10">
@@ -42,7 +103,6 @@
               </div>
               <span class="text-sm font-semibold text-gray-300">{{ lv.cleared }} / {{ lv.total }}</span>
             </div>
-            <!-- プログレスバー -->
             <div class="h-2 bg-gray-800 rounded-full overflow-hidden">
               <div
                 class="h-full rounded-full transition-all duration-700"
@@ -66,6 +126,7 @@
             <div class="flex items-center gap-2">
               <span class="text-xs font-semibold text-green-400">完了</span>
               <span class="text-xs text-gray-500">Lv.{{ p.missionLevel }}</span>
+              <span class="ml-auto text-xs font-semibold text-yellow-400">+{{ xpForLevel(p.missionLevel) }} XP</span>
             </div>
             <p class="font-medium text-gray-100 text-sm">{{ p.missionTitle }}</p>
             <p class="text-xs text-gray-500">
@@ -91,6 +152,7 @@
 
 <script setup lang="ts">
 import { useAuthStore } from '~/stores/auth'
+import { useGameStats, xpForLevel } from '~/composables/useGameStats'
 
 definePageMeta({ middleware: ['auth'] })
 
@@ -107,6 +169,7 @@ interface ProgressItem {
 interface Mission {
   id: string
   level: number
+  orderIndex: number
   title: string
 }
 
@@ -124,11 +187,16 @@ const { data: missionsByLevel } = await useFetch<Record<string, Mission[]>>(
 
 const progressList = computed(() => progressRaw.value ?? [])
 
-// 全ミッション数
 const allMissions = computed(() => {
   if (!missionsByLevel.value) return []
   return Object.values(missionsByLevel.value).flat()
 })
+
+// ゲーミフィケーション統計
+const game = useGameStats(
+  () => progressList.value,
+  () => allMissions.value,
+)
 
 const completedCount = computed(() => progressList.value.filter((p) => p.status === 'COMPLETED').length)
 const inProgressCount = computed(() => progressList.value.filter((p) => p.status === 'IN_PROGRESS').length)
