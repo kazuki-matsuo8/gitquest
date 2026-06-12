@@ -4,9 +4,19 @@
     <Transition name="celebration">
       <div
         v-if="showCelebration"
-        class="absolute inset-0 z-50 flex items-center justify-center bg-gray-950/90 backdrop-blur-sm"
+        class="absolute inset-0 z-50 flex items-center justify-center bg-gray-950/90 backdrop-blur-sm overflow-hidden"
       >
-        <div class="text-center px-8">
+        <!-- 紙吹雪 -->
+        <div class="absolute inset-0 pointer-events-none" aria-hidden="true">
+          <span
+            v-for="piece in confettiPieces"
+            :key="piece.id"
+            class="confetti-piece"
+            :style="piece.style"
+          />
+        </div>
+
+        <div class="relative text-center px-8">
           <div class="text-6xl mb-4 animate-bounce">🎉</div>
           <h2 class="text-3xl font-bold text-green-400 mb-2">ミッション完了！</h2>
           <p class="text-gray-300 mb-3">{{ mission?.title }}</p>
@@ -15,8 +25,22 @@
           </p>
           <div class="flex flex-col sm:flex-row gap-3 justify-center">
             <NuxtLink
-              to="/missions"
+              v-if="nextMission"
+              :to="`/missions/${nextMission.id}/learn`"
               class="px-6 py-3 bg-green-600 hover:bg-green-500 text-white font-semibold rounded-xl transition-colors"
+            >
+              次のミッションへ →
+            </NuxtLink>
+            <NuxtLink
+              v-else
+              to="/dashboard"
+              class="px-6 py-3 bg-green-600 hover:bg-green-500 text-white font-semibold rounded-xl transition-colors"
+            >
+              🎉 全ミッション制覇！ダッシュボードへ
+            </NuxtLink>
+            <NuxtLink
+              to="/missions"
+              class="px-6 py-3 bg-gray-800 hover:bg-gray-700 text-gray-200 font-semibold rounded-xl transition-colors"
             >
               ミッション一覧へ
             </NuxtLink>
@@ -190,6 +214,34 @@ const mission = computed<Mission | null>(() => {
   return null
 })
 
+// 全ミッションをレベル → 順番でフラット化し、次のミッションを求める
+const nextMission = computed<Mission | null>(() => {
+  if (!missionsByLevel.value) return null
+  const flat = Object.values(missionsByLevel.value)
+    .flat()
+    .sort((a, b) => a.level - b.level || a.orderIndex - b.orderIndex)
+  const idx = flat.findIndex((m) => m.id === missionId)
+  return idx >= 0 && idx < flat.length - 1 ? flat[idx + 1] : null
+})
+
+// 紙吹雪 (完了オーバーレイ用)
+const CONFETTI_COLORS = ['#4ade80', '#60a5fa', '#facc15', '#f87171', '#c084fc', '#22d3ee']
+
+const confettiPieces = computed(() => {
+  if (!showCelebration.value) return []
+  return Array.from({ length: 60 }, (_, i) => ({
+    id: i,
+    style: {
+      left: `${Math.random() * 100}%`,
+      backgroundColor: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+      animationDelay: `${Math.random() * 1.2}s`,
+      animationDuration: `${2.2 + Math.random() * 1.8}s`,
+      width: `${6 + Math.random() * 6}px`,
+      height: `${10 + Math.random() * 8}px`,
+    },
+  }))
+})
+
 const progressStatus = ref<string>('NOT_STARTED')
 const showHint        = ref(false)
 const showCelebration = ref(false)
@@ -325,5 +377,27 @@ onUnmounted(async () => {
 .celebration-enter-from,
 .celebration-leave-to {
   opacity: 0;
+}
+
+/* 紙吹雪: 上から回転しながら降ってくる */
+.confetti-piece {
+  position: absolute;
+  top: -20px;
+  border-radius: 2px;
+  opacity: 0;
+  animation-name: confetti-fall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+@keyframes confetti-fall {
+  0% {
+    opacity: 1;
+    transform: translateY(0) rotate(0deg) rotateY(0deg);
+  }
+  100% {
+    opacity: 0.7;
+    transform: translateY(110vh) rotate(540deg) rotateY(360deg);
+  }
 }
 </style>

@@ -32,6 +32,12 @@
               >
                 ミッション
               </NuxtLink>
+              <NuxtLink
+                to="/cheatsheet"
+                class="text-sm text-gray-300 hover:text-white px-3 py-2 rounded-lg hover:bg-gray-800 transition-colors hidden sm:block"
+              >
+                チートシート
+              </NuxtLink>
               <button
                 class="text-sm text-gray-400 hover:text-red-400 px-3 py-2 rounded-lg hover:bg-gray-800 transition-colors"
                 @click="logout"
