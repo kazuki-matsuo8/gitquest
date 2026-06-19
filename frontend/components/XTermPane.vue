@@ -34,7 +34,7 @@ function initTerminal() {
 
   term = new Terminal({
     theme: {
-      background:  '#030712',   // gray-950
+      background:  '#06080f',   // gray-950
       foreground:  '#e5e7eb',   // gray-200
       cursor:      '#22c55e',   // green-500
       black:       '#1f2937',

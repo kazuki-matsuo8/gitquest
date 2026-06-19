@@ -178,8 +178,6 @@ import { useAuthStore } from '~/stores/auth'
 import { xpForLevel } from '~/composables/useGameStats'
 import type { GraphData } from '~/types/terminal'
 
-definePageMeta({ middleware: ['auth'] })
-
 interface Mission {
   id: string
   level: number

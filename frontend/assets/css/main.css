@@ -1,1 +1,109 @@
 @import "tailwindcss";
+
+/* ===================================================================
+   デザイントークン
+   Tailwind v4 のデフォルトカラー / フォントをここで上書きすると
+   bg-gray-900 などのユーティリティ経由で全ページに反映される
+   =================================================================== */
+@theme {
+  /* タイポグラフィ — 本文は Inter、コードは JetBrains Mono */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    "Hiragino Kaku Gothic ProN", "Noto Sans JP", Meiryo, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, "Cascadia Code",
+    "Source Code Pro", monospace;
+
+  /* ニュートラル — 青みのある深いスレート (cool gray)。
+     黄緑のアクセントが映えるよう、わずかに寒色へ寄せている */
+  --color-gray-50: #f6f8fb;
+  --color-gray-100: #eef1f6;
+  --color-gray-200: #dde3ec;
+  --color-gray-300: #c6cdd8;
+  --color-gray-400: #a4adba;
+  --color-gray-500: #79828f;
+  --color-gray-600: #59616d;
+  --color-gray-700: #333b48;
+  --color-gray-800: #1e2533;
+  --color-gray-900: #0d111c;
+  --color-gray-950: #06080f;
+}
+
+/* ===================================================================
+   ベーススタイル — サイト全体の質感
+   =================================================================== */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    /* 上部に繊細なグリーン / ブルーのオーラを敷いて奥行きを出す */
+    background-color: var(--color-gray-950);
+    background-image:
+      radial-gradient(
+        58rem 38rem at 50% -8%,
+        color-mix(in oklab, var(--color-green-500) 9%, transparent),
+        transparent 70%
+      ),
+      radial-gradient(
+        48rem 36rem at 100% 0%,
+        color-mix(in oklab, #3b82f6 6%, transparent),
+        transparent 70%
+      );
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    letter-spacing: -0.011em;
+  }
+
+  /* 選択範囲はブランドのグリーンに */
+  ::selection {
+    background: color-mix(in oklab, var(--color-green-500) 32%, transparent);
+    color: #fff;
+  }
+
+  /* キーボードフォーカスのリングを統一 */
+  :focus-visible {
+    outline: 2px solid color-mix(in oklab, var(--color-green-500) 70%, transparent);
+    outline-offset: 2px;
+  }
+
+  /* 細身のカスタムスクロールバー */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-gray-700) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-gray-700);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-gray-600);
+    background-clip: content-box;
+  }
+}
+
+/* ===================================================================
+   モーションへの配慮 — 視差を抑えたいユーザー向け
+   =================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

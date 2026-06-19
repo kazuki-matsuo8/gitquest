@@ -66,10 +66,9 @@
 <script setup lang="ts">
 import { useAuthStore } from '~/stores/auth'
 
-definePageMeta({ middleware: [] })
-
 const auth = useAuthStore()
 const router = useRouter()
+const route = useRoute()
 
 const form = reactive({ username: '', email: '', password: '' })
 const loading = ref(false)
@@ -80,7 +79,8 @@ async function handleRegister() {
   errorMessage.value = ''
   try {
     await auth.register(form)
-    router.push('/missions')
+    const redirect = route.query.redirect as string | undefined
+    router.push(redirect || '/missions')
   } catch {
     errorMessage.value = '登録に失敗しました。メールアドレスが既に使用されている可能性があります'
   } finally {

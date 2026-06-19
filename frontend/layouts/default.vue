@@ -1,7 +1,7 @@
 <template>
-  <div class="min-h-screen bg-gray-950 text-white">
+  <div class="min-h-screen text-gray-100">
     <!-- ナビバー -->
-    <nav class="border-b border-gray-800 bg-gray-900/80 backdrop-blur-sm sticky top-0 z-50">
+    <nav class="border-b border-white/5 bg-gray-950/70 backdrop-blur-xl sticky top-0 z-50">
       <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex items-center justify-between h-16">
           <!-- ロゴ -->

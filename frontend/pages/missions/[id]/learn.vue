@@ -65,8 +65,6 @@
 <script setup lang="ts">
 import { marked } from 'marked'
 
-definePageMeta({ middleware: ['auth'] })
-
 interface Mission {
   id: string
   level: number

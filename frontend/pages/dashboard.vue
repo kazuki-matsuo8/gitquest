@@ -154,8 +154,6 @@
 import { useAuthStore } from '~/stores/auth'
 import { useGameStats, xpForLevel } from '~/composables/useGameStats'
 
-definePageMeta({ middleware: ['auth'] })
-
 interface ProgressItem {
   id: string
   missionId: string

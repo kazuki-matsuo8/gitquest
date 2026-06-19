@@ -56,10 +56,9 @@
 <script setup lang="ts">
 import { useAuthStore } from '~/stores/auth'
 
-definePageMeta({ middleware: [] })
-
 const auth = useAuthStore()
 const router = useRouter()
+const route = useRoute()
 
 const form = reactive({ email: '', password: '' })
 const loading = ref(false)
@@ -70,7 +69,9 @@ async function handleLogin() {
   errorMessage.value = ''
   try {
     await auth.login(form)
-    router.push('/missions')
+    // 認証ガードに弾かれて来た場合は元のページへ戻す
+    const redirect = route.query.redirect as string | undefined
+    router.push(redirect || '/missions')
   } catch {
     errorMessage.value = 'メールアドレスまたはパスワードが正しくありません'
   } finally {

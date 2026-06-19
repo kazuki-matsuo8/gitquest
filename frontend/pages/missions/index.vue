@@ -107,8 +107,6 @@
 <script setup lang="ts">
 import { useAuthStore } from '~/stores/auth'
 
-definePageMeta({ middleware: ['auth'] })
-
 interface Mission {
   id: string
   level: number
